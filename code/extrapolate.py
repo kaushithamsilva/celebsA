@@ -212,7 +212,7 @@ if __name__ == "__main__":
     num_extrapolation_steps = 20
     step_size = 0.1  # Controls how much attribute changes per step
     # Controls how strongly latent vector is pulled towards center (0.01 to 0.1 is a good starting range)
-    pull_strength = 0.1
+    pull_strength = 0.05
 
     # Define a threshold for the latent vector norm (distance from origin)
     max_latent_norm_threshold = 10 * np.sqrt(LATENT_DIM)
