@@ -185,7 +185,7 @@ if __name__ == "__main__":
     # 7. Extrapolate
     num_extrapolation_steps = 10  # How many steps to take
     # How much to move in the hat direction per step (tune this!)
-    step_size = 2.0
+    step_size = 0.5
 
     # Start with the original image
     generated_images = [original_mustache_image[0]]
