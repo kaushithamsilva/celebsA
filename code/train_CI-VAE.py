@@ -308,7 +308,7 @@ if __name__ == '__main__':
     optimizer = tf.keras.optimizers.AdamW(learning_rate=1e-4)
 
     # --- Training ---
-    epochs = 500  # Consider running for more epochs for better results
+    epochs = 1000
     train_ci_vae(vae_model, discriminators,
                  train_ds, val_ds, optimizer, epochs=epochs,
                  attribute_names=celeba_attribute_names)
