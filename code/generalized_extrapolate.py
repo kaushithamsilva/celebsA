@@ -326,27 +326,27 @@ if __name__ == "__main__":
     )
     print("Dataset loaded.")
 
-    # Example 7: Female, No Eyeglasses to Female, With Eyeglasses
-    female_to_glasses_experiment = {
-        # Start with a female who does NOT have eyeglasses
-        "initial_image_criteria": {"Female": 1, "Eyeglasses": 0},
+    # Example 7: Female, No Eyeglasses to Female, With Eyeglasses (Corrected for 'Male' attribute)
+    female_to_glasses_experiment_corrected = {
+        # Start with a female (Male: 0) who does NOT have eyeglasses
+        "initial_image_criteria": {"Male": 0, "Eyeglasses": 0},
         "attribute_to_change": "Eyeglasses",
         # Moving from No Eyeglasses (0) to Eyeglasses (1)
         "change_direction_towards_positive": True,
         # Target: 'Eyeglasses' score very positive (has eyeglasses)
         "target_attr_stop_threshold": 20.0,
-        "fixed_attribute": "Female",
-        # Stop if 'Female' score drops below 0.5 (becomes more male)
+        "fixed_attribute": "Male",  # Now correctly references 'Male'
+        # Stop if 'Male' score *rises above* 0.5 (becomes more male)
         "fixed_attr_stability_threshold": 0.5,
         "num_extrapolation_steps": 25,
         "step_size": 0.3,
         "pull_strength": 0.015,
-        "output_filename_suffix": "female_to_glasses",
+        "output_filename_suffix": "female_to_glasses_corrected",
         "title": "Extrapolation: Female, No Eyeglasses to Female, With Eyeglasses"
     }
 
     # Don't forget to call this new experiment!
     run_extrapolation_experiment(
-        vae_model, celeba_attribute_names, train_ds, female_to_glasses_experiment)
+        vae_model, celeba_attribute_names, train_ds, female_to_glasses_experiment_corrected)
 
     print("\n--- All Extrapolation Experiments Complete ---")
