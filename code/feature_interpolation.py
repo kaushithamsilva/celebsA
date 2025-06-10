@@ -8,26 +8,20 @@ import matplotlib.pyplot as plt
 from vae import VAE, Sampling  # Assuming VAE and Sampling classes are in vae.py
 from preprocess import get_celeba_datasets_with_splits
 import model_utils  # Your model_utils.py with save_model and load_model
-# Your provided Hyperplane class (though not strictly needed for interpolation itself)
-from hyperplane import Hyperplane
+# Hyperplane is not used in interpolation, so we can comment it out or remove it if desired
+# from hyperplane import Hyperplane
 
-# --- Configuration Paths (MUST BE CORRECTED) ---
-# Base directory where your models are saved
+# --- Configuration Paths ---
 SAVE_PATH = '../../models/ci_vae/'
 CHECKPOINT_PATH = os.path.join(SAVE_PATH, 'checkpoints/')
-# DISCRIMINATOR_SAVE_PATH = os.path.join(SAVE_PATH, 'discriminators/') # Not directly used in interpolation script
-EPOCH = 500
+EPOCH = 500  # The epoch number for your saved VAE model
 
 VAE_MODEL_PATH = CHECKPOINT_PATH
-VAE_MODEL_NAME = f'vae-e{EPOCH}'  # Load the VAE from the specified epoch
+VAE_MODEL_NAME = f'vae-e{EPOCH}'
 
 IMAGE_DIR = '../data/img_align_celeba/img_align_celeba/'
 ATTRIBUTES_CSV = '../data/list_attr_celeba.csv'
 EVAL_PARTITION_CSV = '../data/list_eval_partition.csv'
-
-# Output directory for interpolated images
-OUTPUT_DIR = '../figures/interpolated_mustache_hat_samples/'  # New output directory
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # --- Model Parameters (MUST MATCH TRAINING) ---
 INPUT_IMAGE_SIZE = (64, 64)
@@ -66,9 +60,14 @@ def select_images_with_specific_attributes(dataset, attribute_indices, desired_v
         # Start with a mask that assumes all in batch match
         batch_mask = tf.constant(True, shape=(tf.shape(image_batch)[0],))
 
+        # Ensure attr_batch has the same dtype as desired_values for comparison
+        # Assuming desired_values are typically int/float 0 or 1
+        # Cast to int for comparison with 0/1
+        attr_batch_cast = tf.cast(attr_batch, tf.int32)
+
         for idx, desired_val in zip(attribute_indices, desired_values):
             # Create a mask for each attribute and combine them
-            attr_mask = (attr_batch[:, idx] == desired_val)
+            attr_mask = (attr_batch_cast[:, idx] == desired_val)
             batch_mask = tf.logical_and(batch_mask, attr_mask)
 
         # Apply the combined mask to get filtered images and attributes
@@ -109,13 +108,151 @@ def plot_images(images, title="", filename=""):
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     if filename:
+        # Ensure OUTPUT_DIR exists
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
         plt.savefig(os.path.join(OUTPUT_DIR, filename))
         print(f"Saved plot to {os.path.join(OUTPUT_DIR, filename)}")
     plt.show()
 
 
+def perform_interpolation(
+    vae_model,
+    train_ds,
+    celeba_attribute_names,
+    attribute_name1,
+    attribute_value1_start,
+    attribute_value1_end,
+    attribute_name2=None,  # Optional second attribute to keep constant
+    attribute_value2=None,  # Desired value for the second attribute
+    num_interpolations=10,
+    output_dir_suffix=""  # For specific output folders
+):
+    """
+    Performs latent space interpolation between images defined by specified attributes.
+    """
+    print(
+        f"\n--- Starting Latent Space Interpolation: {attribute_name1} {attribute_value1_start} to {attribute_name1} {attribute_value1_end} ---")
+
+    # Get attribute indices
+    try:
+        attr1_idx = get_attribute_index(
+            attribute_name1, celeba_attribute_names)
+        print(f"Found '{attribute_name1}' attribute at index: {attr1_idx}")
+
+        attribute_indices_start = [attr1_idx]
+        desired_values_start = [attribute_value1_start]
+
+        attribute_indices_end = [attr1_idx]
+        desired_values_end = [attribute_value1_end]
+
+        interpolation_title_base = f"{attribute_name1} ({attribute_value1_start} -> {attribute_value1_end})"
+        filename_base = f"{attribute_name1.replace(' ', '_')}_{attribute_value1_start}_to_{attribute_value1_end}"
+
+        if attribute_name2:
+            attr2_idx = get_attribute_index(
+                attribute_name2, celeba_attribute_names)
+            print(f"Found '{attribute_name2}' attribute at index: {attr2_idx}")
+
+            # Add the second attribute to the conditions for both start and end images
+            attribute_indices_start.append(attr2_idx)
+            desired_values_start.append(attribute_value2)
+            attribute_indices_end.append(attr2_idx)
+            desired_values_end.append(attribute_value2)
+
+            interpolation_title_base += f" (Keeping {attribute_name2}={attribute_value2})"
+            filename_base += f"_keeping_{attribute_name2.replace(' ', '_')}_{attribute_value2}"
+
+    except ValueError as e:
+        print(f"Error getting attribute indices: {e}")
+        return
+
+    # Set up specific output directory for this interpolation
+    global OUTPUT_DIR  # Access the global variable
+    original_output_dir = OUTPUT_DIR  # Store original
+    if output_dir_suffix:
+        OUTPUT_DIR = os.path.join(os.path.dirname(
+            original_output_dir), output_dir_suffix)
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        print(f"Set output directory to: {OUTPUT_DIR}")
+
+    # 1. Select the start image
+    print(
+        f"\nSelecting one image for start point ({attribute_name1}={attribute_value1_start}{f', {attribute_name2}={attribute_value2}' if attribute_name2 else ''})...")
+    try:
+        start_images, _ = select_images_with_specific_attributes(
+            train_ds,
+            attribute_indices=attribute_indices_start,
+            desired_values=desired_values_start,
+            num_samples=1
+        )
+        image_start = tf.expand_dims(start_images[0], axis=0)  # Add batch dim
+        plot_images([image_start[0]], title=f"Original Start: {interpolation_title_base.split(' ')[0]} {attribute_value1_start}",
+                    filename=f"original_start_{filename_base}.png")
+    except ValueError as e:
+        print(f"Error selecting start image: {e}")
+        OUTPUT_DIR = original_output_dir  # Revert output dir
+        return
+
+    # 2. Select the end image
+    print(
+        f"\nSelecting one image for end point ({attribute_name1}={attribute_value1_end}{f', {attribute_name2}={attribute_value2}' if attribute_name2 else ''})...")
+    try:
+        end_images, _ = select_images_with_specific_attributes(
+            train_ds,
+            attribute_indices=attribute_indices_end,
+            desired_values=desired_values_end,
+            num_samples=1
+        )
+        image_end = tf.expand_dims(end_images[0], axis=0)  # Add batch dim
+        plot_images([image_end[0]], title=f"Original End: {interpolation_title_base.split(' ')[0]} {attribute_value1_end}",
+                    filename=f"original_end_{filename_base}.png")
+    except ValueError as e:
+        print(f"Error selecting end image: {e}")
+        OUTPUT_DIR = original_output_dir  # Revert output dir
+        return
+
+    # Combine original images for a single plot
+    plot_images([image_start[0], image_end[0]],
+                title=f"Original Samples for Interpolation ({interpolation_title_base})",
+                filename=f"original_samples_{filename_base}.png")
+
+    # 3. Encode the selected images
+    print("\nEncoding images into latent space...")
+    z_mean_start, _, _ = vae_model.encode(image_start)
+    z_mean_end, _, _ = vae_model.encode(image_end)
+    print(f"Latent vector START shape: {z_mean_start.shape}")
+    print(f"Latent vector END shape: {z_mean_end.shape}")
+
+    # 4. Interpolate in latent space
+    interpolation_factors = np.linspace(
+        0, 1, num_interpolations)  # 0 to 1 in N steps
+
+    interpolated_latent_vectors = []
+    for alpha in interpolation_factors:
+        interpolated_z = (1 - alpha) * z_mean_start + alpha * z_mean_end
+        interpolated_latent_vectors.append(interpolated_z)
+
+    # Concatenate to a single tensor for batch decoding
+    interpolated_latent_vectors_batch = tf.concat(
+        interpolated_latent_vectors, axis=0)
+    print(f"Generated {num_interpolations} interpolated latent vectors.")
+
+    # 5. Decode and visualize
+    print("Decoding interpolated latent vectors...")
+    decoded_images = vae_model.decode(interpolated_latent_vectors_batch)
+
+    plot_images(decoded_images,
+                title=f"Latent Space Interpolation: {interpolation_title_base} (Epoch {EPOCH})",
+                filename=f"interpolation_sequence_{filename_base}.png")
+
+    print(f"--- Interpolation complete for {interpolation_title_base} ---")
+
+    OUTPUT_DIR = original_output_dir  # Revert output dir to original
+    print(f"Output directory reverted to: {OUTPUT_DIR}")
+
+
 if __name__ == "__main__":
-    print("--- Starting Latent Space Interpolation (Mustache No-Hat to Mustache Hat) ---")
+    print("--- Starting General Latent Space Interpolation Script ---")
 
     # 1. Load VAE model
     print(f"Loading VAE model from {VAE_MODEL_PATH}...")
@@ -139,88 +276,58 @@ if __name__ == "__main__":
     )
     print("Dataset loaded.")
 
-    # Get attribute indices
-    try:
-        mustache_attr_idx = get_attribute_index(
-            'Mustache', celeba_attribute_names)
-        wearing_hat_attr_idx = get_attribute_index(
-            'Wearing_Hat', celeba_attribute_names)
-        print(f"Found 'Mustache' attribute at index: {mustache_attr_idx}")
-        print(
-            f"Found 'Wearing_Hat' attribute at index: {wearing_hat_attr_idx}")
-    except ValueError as e:
-        print(f"Error: {e}")
-        exit()
+    # --- EXAMPLE 1: Mustache (No Hat -> With Hat) ---
+    # print("\n" + "="*50)
+    # print("Running Example 1: Mustache (No Hat -> With Hat)")
+    # print("="*50)
+    # perform_interpolation(
+    #     vae_model=vae_model,
+    #     train_ds=train_ds,
+    #     celeba_attribute_names=celeba_attribute_names,
+    #     attribute_name1='Wearing_Hat',       # The attribute that changes
+    #     attribute_value1_start=0,            # Start with No Hat
+    #     attribute_value1_end=1,              # End with With Hat
+    #     attribute_name2='Mustache',          # Keep Mustache constant
+    #     attribute_value2=1,                  # Keep Mustache present
+    #     num_interpolations=10,
+    #     output_dir_suffix="interpolated_mustache_hat_samples" # Specific folder for this example
+    # )
 
-    # 3. Select two images with specific attribute combinations
-    print("\nSelecting one image with 'Mustache' and 'No Hat'...")
-    try:
-        # Mustache=1, Wearing_Hat=0
-        mustache_no_hat_images, _ = select_images_with_specific_attributes(
-            train_ds,
-            attribute_indices=[mustache_attr_idx, wearing_hat_attr_idx],
-            desired_values=[1, 0],
-            num_samples=1
-        )
-        image1_mustache_no_hat = tf.expand_dims(
-            mustache_no_hat_images[0], axis=0)  # Add batch dim
-        plot_images([image1_mustache_no_hat[0]], title="Original: Mustache, No Hat",
-                    filename="original_mustache_no_hat.png")
-    except ValueError as e:
-        print(f"Error selecting Mustache & No Hat image: {e}")
-        exit()
+    # --- EXAMPLE 2: Smiling (Not Smiling -> Smiling) ---
+    print("\n" + "="*50)
+    print("Running Example 2: Smiling (Not Smiling -> Smiling) while keeping Male")
+    print("="*50)
+    perform_interpolation(
+        vae_model=vae_model,
+        train_ds=train_ds,
+        celeba_attribute_names=celeba_attribute_names,
+        attribute_name1='Smiling',           # The attribute that changes
+        attribute_value1_start=0,            # Start with Not Smiling
+        attribute_value1_end=1,              # End with Smiling
+        attribute_name2='Male',              # Keep Male constant
+        # Keep Male present (Female is -1 in CelebA, so 1 is Male)
+        attribute_value2=1,
+        num_interpolations=10,
+        # Specific folder for this example
+        output_dir_suffix="interpolated_smiling_male_samples"
+    )
 
-    print("\nSelecting one image with 'Mustache' and 'Wearing Hat'...")
-    try:
-        # Mustache=1, Wearing_Hat=1
-        mustache_with_hat_images, _ = select_images_with_specific_attributes(
-            train_ds,
-            attribute_indices=[mustache_attr_idx, wearing_hat_attr_idx],
-            desired_values=[1, 1],
-            num_samples=1
-        )
-        image2_mustache_with_hat = tf.expand_dims(
-            mustache_with_hat_images[0], axis=0)  # Add batch dim
-        plot_images([image2_mustache_with_hat[0]], title="Original: Mustache, With Hat",
-                    filename="original_mustache_with_hat.png")
-    except ValueError as e:
-        print(f"Error selecting Mustache & With Hat image: {e}")
-        exit()
+    # --- EXAMPLE 3: Bangs (No Bangs -> With Bangs) while keeping Young ---
+    print("\n" + "="*50)
+    print("Running Example 3: Bangs (No Bangs -> With Bangs) while keeping Young")
+    print("="*50)
+    perform_interpolation(
+        vae_model=vae_model,
+        train_ds=train_ds,
+        celeba_attribute_names=celeba_attribute_names,
+        attribute_name1='Bangs',             # The attribute that changes
+        attribute_value1_start=0,            # Start with No Bangs
+        attribute_value1_end=1,              # End with With Bangs
+        attribute_name2='Young',             # Keep Young constant
+        attribute_value2=1,                  # Keep Young
+        num_interpolations=10,
+        # Specific folder for this example
+        output_dir_suffix="interpolated_bangs_young_samples"
+    )
 
-    # Combine original images for a single plot
-    plot_images([image1_mustache_no_hat[0], image2_mustache_with_hat[0]],
-                title="Original Samples for Interpolation",
-                filename="original_interpolation_samples.png")
-
-    # 4. Encode the selected images
-    print("\nEncoding images into latent space...")
-    z_mean1, _, _ = vae_model.encode(image1_mustache_no_hat)
-    z_mean2, _, _ = vae_model.encode(image2_mustache_with_hat)
-    print(f"Latent vector 1 (Mustache, No Hat) shape: {z_mean1.shape}")
-    print(f"Latent vector 2 (Mustache, With Hat) shape: {z_mean2.shape}")
-
-    # 5. Interpolate in latent space
-    num_interpolations = 10
-    interpolation_factors = np.linspace(
-        0, 1, num_interpolations)  # 0 to 1 in 10 steps
-
-    interpolated_latent_vectors = []
-    for alpha in interpolation_factors:
-        # Linear interpolation: z_interp = (1 - alpha) * z1 + alpha * z2
-        interpolated_z = (1 - alpha) * z_mean1 + alpha * z_mean2
-        interpolated_latent_vectors.append(interpolated_z)
-
-    # Concatenate to a single tensor for batch decoding
-    interpolated_latent_vectors_batch = tf.concat(
-        interpolated_latent_vectors, axis=0)
-    print(f"Generated {num_interpolations} interpolated latent vectors.")
-
-    # 6. Decode and visualize
-    print("Decoding interpolated latent vectors...")
-    decoded_images = vae_model.decode(interpolated_latent_vectors_batch)
-
-    plot_images(decoded_images,
-                title=f"Latent Space Interpolation: Mustache (No Hat -> With Hat) (Epoch {EPOCH})",
-                filename="mustache_hat_interpolation_samples.png")
-
-    print("--- Interpolation complete ---")
+    print("\n--- All Interpolation Examples Complete ---")
