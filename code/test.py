@@ -2,7 +2,7 @@ import tensorflow as tf
 from preprocess import get_celeba_datasets_with_splits
 
 # Assuming you have these paths
-image_directory = '..data/img_align_celeba/img_align_celeba'
+image_directory = '..data/img_align_celeba/img_align_celeba/'
 attributes_csv = '../data/list_attr_celeba.csv'
 eval_partition_csv = "../data/list_eval_partition.csv"
 
