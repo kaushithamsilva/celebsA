@@ -1,6 +1,7 @@
 *.pyc
 /dataset/processed
 /figures
+/data
 /.venv
 *.out
 /synthesized
