@@ -351,28 +351,28 @@ if __name__ == "__main__":
     )
     print("Dataset loaded.")
 
-    # Example 7: Female, No Eyeglasses to Female, With Eyeglasses (Corrected for 'Male' attribute)
-    female_to_glasses_experiment_corrected = {
-        # Start with a female (Male: 0) who does NOT have eyeglasses
-        "initial_image_criteria": {"Male": 0, "Eyeglasses": 0},
-        "attribute_to_change": "Eyeglasses",
-        # Moving from No Eyeglasses (0) to Eyeglasses (1)
-        "change_direction_towards_positive": True,
-        # Target: 'Eyeglasses' score very positive (has eyeglasses)
-        "target_attr_stop_threshold": 40.0,
-        "fixed_attribute": "Male",  # Now correctly references 'Male'
-        # Stop if 'Male' score *rises above* 0.5 (becomes more male)
-        # THIS SHOULD BE POSITIVE, e.g., 0.5, to stop if it becomes male
+    # Example 9: Male, Not Young to Male, Older (keeping Male fixed)
+    male_to_older_experiment = {
+        # Start with a male who is NOT 'Young' (i.e., already somewhat older or middle-aged)
+        "initial_image_criteria": {"Male": 1, "Young": 0},
+        "attribute_to_change": "Young",
+        # Moving from Not Young (0) towards even less Young (more negative score for Young)
+        "change_direction_towards_positive": False,
+        # Target: 'Young' score very negative (looks old)
+        # A significantly negative score for 'Young' implies 'Old'
+        "target_attr_stop_threshold": -25.0,
+        "fixed_attribute": "Male",
+        # Stop if 'Male' score drops below 0.5 (becomes more female)
         "fixed_attr_stability_threshold": 0.5,
-        "num_extrapolation_steps": 25,
-        "step_size": 0.3,
-        "pull_strength": 0.01,
-        "output_filename_suffix": "female_to_glasses_corrected",
-        "title": "Extrapolation: Female, No Eyeglasses to Female, With Eyeglasses"
+        "num_extrapolation_steps": 30,
+        "step_size": 0.2,
+        "pull_strength": 0.015,
+        "output_filename_suffix": "male_to_older",
+        "title": "Extrapolation: Male, Not Young to Male, Older"
     }
 
     # Don't forget to call this new experiment!
     run_extrapolation_experiment(
-        vae_model, celeba_attribute_names, train_ds, female_to_glasses_experiment_corrected)
+        vae_model, celeba_attribute_names, train_ds, male_to_older_experiment)
 
     print("\n--- All Extrapolation Experiments Complete ---")
