@@ -5,16 +5,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Import your custom modules
-from vae import VAE, Sampling  # Assuming VAE and Sampling classes are in vae.py
+from vae import VAE, Sampling
 from preprocess import get_celeba_datasets_with_splits
-import model_utils  # Your model_utils.py with save_model and load_model
-from hyperplane import Hyperplane  # Your provided Hyperplane class
+import model_utils
+from hyperplane import Hyperplane
 
 # --- Configuration Paths (MUST BE CORRECTED) ---
 # Base directory where your models are saved
 SAVE_PATH = '../../models/ci_vae/'
 CHECKPOINT_PATH = os.path.join(SAVE_PATH, 'checkpoints/')
-# DISCRIMINATOR_SAVE_PATH = os.path.join(SAVE_PATH, 'discriminators/')
 DISCRIMINATOR_SAVE_PATH = CHECKPOINT_PATH
 EPOCH = 400  # The epoch number for the saved VAE and discriminator checkpoints
 
@@ -26,14 +25,15 @@ ATTRIBUTES_CSV = '../data/list_attr_celeba.csv'
 EVAL_PARTITION_CSV = '../data/list_eval_partition.csv'
 
 # Output directory for extrapolated images
-OUTPUT_DIR = '../figures/extrapolated_hat_mustache_samples/'
+# Updated output directory for new attributes
+OUTPUT_DIR = '../figures/extrapolated_male_bald_to_hair_samples/'
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # --- Model Parameters (MUST MATCH TRAINING) ---
 INPUT_IMAGE_SIZE = (64, 64)
 INPUT_IMAGE_CHANNELS = 3
 LATENT_DIM = 128
-HIDDEN_DIM = 64  # Base filters used in VAE constructor
+HIDDEN_DIM = 64
 
 
 def get_attribute_index(attribute_name, attr_names_list):
@@ -47,31 +47,51 @@ def get_attribute_index(attribute_name, attr_names_list):
             f"Attribute '{attribute_name}' not found in attribute list. Available: {attr_names_list}")
 
 
-def select_images_with_attribute(dataset, attribute_index, num_samples=1):
+def select_images_with_specific_attributes(dataset, attribute_indices, desired_values, num_samples=1):
     """
-    Selects a specified number of images that have the given attribute.
-    Iterates over batches and collects samples.
+    Selects a specified number of images that match ALL desired attribute values.
+    Args:
+        dataset (tf.data.Dataset): The dataset to search.
+        attribute_indices (list): List of attribute indices to check.
+        desired_values (list): List of desired binary values (0 or 1) corresponding to attribute_indices.
+                               E.g., [1, 0] for (mustache=1, hat=0)
+        num_samples (int): Number of samples to find.
+    Returns:
+        tuple: (list of selected images, list of selected attribute tensors)
     """
     selected_images = []
     selected_attributes = []
 
+    # Ensure desired_values are integers for comparison
+    desired_values = [int(v) for v in desired_values]
+
     for image_batch, attr_batch in dataset:
-        has_attribute_mask = (attr_batch[:, attribute_index] == 1)
+        # Start with a mask that assumes all in batch match
+        batch_mask = tf.constant(True, shape=(tf.shape(image_batch)[0],))
 
-        images_with_attribute = tf.boolean_mask(
-            image_batch, has_attribute_mask)
-        attrs_with_attribute = tf.boolean_mask(attr_batch, has_attribute_mask)
+        for idx, desired_val in zip(attribute_indices, desired_values):
+            # Create a mask for each attribute and combine them
+            attr_mask = (tf.cast(attr_batch[:, idx], tf.int32) == desired_val)
+            batch_mask = tf.logical_and(batch_mask, attr_mask)
 
-        for i in range(tf.shape(images_with_attribute)[0]):
-            selected_images.append(images_with_attribute[i])
-            selected_attributes.append(attrs_with_attribute[i])
+        # Apply the combined mask to get filtered images and attributes
+        images_matching = tf.boolean_mask(image_batch, batch_mask)
+        attrs_matching = tf.boolean_mask(attr_batch, batch_mask)
+
+        for i in range(tf.shape(images_matching)[0]):
+            selected_images.append(images_matching[i])
+            selected_attributes.append(attrs_matching[i])
 
             if len(selected_images) >= num_samples:
                 return selected_images[:num_samples], selected_attributes[:num_samples]
 
     if len(selected_images) < num_samples:
+        attr_search_str = ", ".join([
+            f"{attr_names_list[a_idx]}={'Positive' if d_val == 1 else 'Negative'}"
+            for a_idx, d_val in zip(attribute_indices, desired_values)
+        ])
         raise ValueError(
-            f"Could not find {num_samples} images with the specified attribute.")
+            f"Could not find {num_samples} images with attributes: {attr_search_str}. Available: {attr_names_list}")
     return selected_images[:num_samples], selected_attributes[:num_samples]
 
 
@@ -99,6 +119,7 @@ def plot_images(images, title="", filename=""):
         plt.savefig(os.path.join(OUTPUT_DIR, filename))
         print(f"Saved plot to {os.path.join(OUTPUT_DIR, filename)}")
     plt.show()
+    plt.close()  # Close the figure to free memory
 
 
 if __name__ == "__main__":
@@ -122,109 +143,137 @@ if __name__ == "__main__":
         attr_csv_path=ATTRIBUTES_CSV,
         eval_csv_path=EVAL_PARTITION_CSV,
         image_size=INPUT_IMAGE_SIZE,
-        batch_size=32  # Keep it batched for efficient iteration
+        batch_size=32
     )
     print("Dataset loaded.")
 
-    # Get attribute indices
+    # Get attribute indices for 'Male' and 'Bald'
     try:
-        mustache_attr_idx = get_attribute_index(
-            'Mustache', celeba_attribute_names)
-        wearing_hat_attr_idx = get_attribute_index(
-            'Wearing_Hat', celeba_attribute_names)
-        print(f"Found 'Mustache' attribute at index: {mustache_attr_idx}")
-        print(
-            f"Found 'Wearing_Hat' attribute at index: {wearing_hat_attr_idx}")
+        male_attr_idx = get_attribute_index('Male', celeba_attribute_names)
+        bald_attr_idx = get_attribute_index('Bald', celeba_attribute_names)
+
+        print(f"Found 'Male' attribute at index: {male_attr_idx}")
+        print(f"Found 'Bald' attribute at index: {bald_attr_idx}")
     except ValueError as e:
         print(f"Error: {e}")
         exit()
 
-    # 3. Select one image with 'Mustache'
-    print(f"Selecting one image with 'Mustache' attribute...")
+    # 3. Select one initial image: Male and Bald
+    print(f"Selecting one image that is 'Male' and 'Bald'...")
     try:
-        mustache_images, _ = select_images_with_attribute(
-            train_ds, mustache_attr_idx, num_samples=1)
-        original_mustache_image = tf.expand_dims(
-            mustache_images[0], axis=0)  # Add batch dim
-        plot_images([original_mustache_image[0]], title="Original Mustache Image",
-                    filename="original_mustache_image.png")
+        # Desired: Male=1, Bald=1
+        initial_images, _ = select_images_with_specific_attributes(
+            train_ds,
+            attribute_indices=[male_attr_idx, bald_attr_idx],
+            desired_values=[1, 1],
+            num_samples=1
+        )
+        original_image = tf.expand_dims(initial_images[0], axis=0)
+        plot_images([original_image[0]], title="Original Male, Bald Image",
+                    filename="original_male_bald_image.png")
     except ValueError as e:
-        print(f"Error selecting original image: {e}")
+        print(f"Error selecting initial image: {e}")
+        print("Could not find a 'Male' and 'Bald' image. Please ensure such images exist and are accessible in your dataset.")
         exit()
 
-    # 4. Load the discriminators
+    # 4. Load the discriminators for the attributes we care about (Male, Bald)
     print("Loading attribute discriminators...")
-    mustache_disc_name = f"{celeba_attribute_names[mustache_attr_idx].replace(' ', '_')}_discriminator-e{EPOCH}"
-    wearing_hat_disc_name = f"{celeba_attribute_names[wearing_hat_attr_idx].replace(' ', '_')}_discriminator-e{EPOCH}"
+    male_disc_name = f"{celeba_attribute_names[male_attr_idx].replace(' ', '_')}_discriminator-e{EPOCH}"
+    bald_disc_name = f"{celeba_attribute_names[bald_attr_idx].replace(' ', '_')}_discriminator-e{EPOCH}"
 
-    mustache_discriminator_model = model_utils.load_model(
-        CHECKPOINT_PATH, mustache_disc_name)
-    wearing_hat_discriminator_model = model_utils.load_model(
-        CHECKPOINT_PATH, wearing_hat_disc_name)
+    male_discriminator_model = model_utils.load_model(
+        CHECKPOINT_PATH, male_disc_name)
+    bald_discriminator_model = model_utils.load_model(
+        CHECKPOINT_PATH, bald_disc_name)
 
-    if mustache_discriminator_model is None or wearing_hat_discriminator_model is None:
+    if male_discriminator_model is None or bald_discriminator_model is None:
         print("Failed to load one or both discriminator models. Exiting.")
         exit()
     print("Discriminator models loaded successfully.")
 
-    # 5. Extract hyperplane parameters
-    mustache_hyperplane = Hyperplane(mustache_discriminator_model)
-    wearing_hat_hyperplane = Hyperplane(wearing_hat_discriminator_model)
+    # 5. Extract hyperplane parameters for 'Bald' attribute (this will be our direction)
+    bald_hyperplane = Hyperplane(bald_discriminator_model)
+    # The normal vector 'w' for 'Bald' attribute will point in the direction of 'Baldness'
+    # To go from Bald (1) to Not Bald (0), we need to move in the *opposite* direction of the baldness vector.
+    bald_direction_vector, _ = bald_hyperplane.get_hyplerplane_params()
 
-    # Get the direction vector for 'Wearing_Hat'
-    # The normal vector 'w' of the hyperplane points in the direction of increasing probability for the positive class.
-    hat_direction_vector, _ = wearing_hat_hyperplane.get_hyplerplane_params()
-    # Ensure it's a (1, latent_dim) tensor for addition later
-    hat_direction_vector = tf.expand_dims(hat_direction_vector, axis=0)
-    print(f"Hat direction vector shape: {hat_direction_vector.shape}")
+    # We want to go from Bald (positive score) to Not Bald (negative score),
+    # so we'll move in the negative direction of the 'Bald' hyperplane normal vector.
+    # Negate the vector to move towards 'Not Bald'
+    direction_vector = -tf.expand_dims(bald_direction_vector, axis=0)
+    print(
+        f"Direction vector (towards Not Bald) shape: {direction_vector.shape}")
 
-    # 6. Encode the original mustache image
-    initial_z_mean, _, _ = vae_model.encode(original_mustache_image)
-    current_z = tf.identity(initial_z_mean)  # Start manipulation from here
+    # 6. Encode the original image (Male and Bald)
+    initial_z_mean, _, _ = vae_model.encode(original_image)
+    current_z = tf.identity(initial_z_mean)
 
-    # 7. Extrapolate
-    num_extrapolation_steps = 10  # How many steps to take
-    # How much to move in the hat direction per step (tune this!)
-    step_size = 0.5
+    # 7. Extrapolate with pull-to-center
+    num_extrapolation_steps = 20
+    step_size = 0.5  # Controls how much attribute changes per step
+    # Controls how strongly latent vector is pulled towards center (0.01 to 0.1 is a good starting range)
+    pull_strength = 0.1
+
+    # Define a threshold for the latent vector norm (distance from origin)
+    max_latent_norm_threshold = 2.5 * np.sqrt(LATENT_DIM)
+    print(f"Maximum allowed latent norm: {max_latent_norm_threshold:.2f}")
+    print(f"Pull-to-center strength (beta): {pull_strength}")
 
     # Start with the original image
-    generated_images = [original_mustache_image[0]]
+    generated_images = [original_image[0]]
 
-    print("\nStarting extrapolation...")
+    print("\nStarting extrapolation with pull-to-center (Male, Bald -> Male, Not Bald)...")
     for i in range(num_extrapolation_steps):
-        # Calculate current 'Mustache' score
-        mustache_score_current = mustache_discriminator_model(current_z).numpy()[
-            0, 0]
+        # Calculate current 'Bald' score (this is the attribute we are changing)
+        bald_score_current = bald_discriminator_model(current_z).numpy()[0, 0]
+        # Calculate current 'Male' score (this should remain stable)
+        male_score_current = male_discriminator_model(current_z).numpy()[0, 0]
 
-        # Check if still in 'mustache' region (positive score implies mustache present)
-        # Assuming 0 is the decision boundary for binary classification.
-        # A positive logit implies "present" and negative implies "absent".
-        if mustache_score_current < -0.5:  # Tune this threshold, e.g., -0.5 or 0.0
+        # Calculate current latent vector norm
+        current_latent_norm = tf.norm(current_z).numpy()
+
+        # Check conditions to stop extrapolation
+        # Condition 1: 'Bald' attribute changes (we want to reach a 'Not Bald' state)
+        # Assuming a negative score implies 'Not Bald'
+        if bald_score_current < -1.0:  # Tuned threshold for 'Bald' to 'Not Bald' transition
             print(
-                f"Stopped at step {i+1}: Latent vector moved out of 'Mustache' region. Score: {mustache_score_current:.2f}")
+                f"Stopped at step {i+1}: Latent vector reached 'Not Bald' region. Bald Score: {bald_score_current:.2f}")
             break
 
-        # Move in the 'Wearing_Hat' direction
-        current_z = current_z + step_size * hat_direction_vector
+        # Condition 2: Latent vector goes too far from the origin (to maintain quality/validity)
+        if current_latent_norm > max_latent_norm_threshold:
+            print(
+                f"Stopped at step {i+1}: Latent vector norm ({current_latent_norm:.2f}) exceeded threshold ({max_latent_norm_threshold:.2f}).")
+            break
+
+        # Condition 3: Ensure 'Male' attribute is preserved (optional, but good for control)
+        # You might want to adjust the threshold for 'Male' score, e.g., > 0.0 or > -0.5
+        # If 'Male' score drops significantly, you might be changing gender, which is undesirable.
+        if male_score_current < -0.5:  # Assuming positive score means male, negative means not male
+            print(
+                f"Stopped at step {i+1}: Latent vector moved out of 'Male' region. Male Score: {male_score_current:.2f}")
+            break
+
+        # Apply the pull-to-center logic and move along the direction vector
+        current_z = (1 - pull_strength) * current_z + \
+            step_size * direction_vector
 
         # Decode the new latent vector
         decoded_img = vae_model.decode(current_z)
         generated_images.append(decoded_img[0])
 
-        # Calculate new 'Mustache' and 'Wearing_Hat' scores for monitoring
-        mustache_score_new = mustache_discriminator_model(current_z).numpy()[
-            0, 0]
-        hat_score_new = wearing_hat_discriminator_model(current_z).numpy()[
-            0, 0]
+        # Calculate new scores for monitoring
+        bald_score_new = bald_discriminator_model(current_z).numpy()[0, 0]
+        male_score_new = male_discriminator_model(current_z).numpy()[0, 0]
         print(
-            f"Step {i+1}: Mustache Score = {mustache_score_new:.2f}, Hat Score = {hat_score_new:.2f}")
+            f"Step {i+1}: Bald Score = {bald_score_new:.2f}, Male Score = {male_score_new:.2f}, Latent Norm = {tf.norm(current_z).numpy():.2f}")
 
     print(
         f"Extrapolation completed. Generated {len(generated_images)} images.")
 
     # 8. Visualize results
     plot_images(generated_images,
-                title=f"Extrapolation: Mustache to Hat (Epoch {EPOCH})",
-                filename="extrapolation_mustache_to_hat.png")
+                title=f"Extrapolation: Male, Bald to Male, Hair (Epoch {EPOCH}, Beta={pull_strength})",
+                filename="extrapolation_male_bald_to_hair_pull_to_center.png")
 
     print("--- Extrapolation complete ---")
