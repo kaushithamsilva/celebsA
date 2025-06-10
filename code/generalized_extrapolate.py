@@ -268,11 +268,36 @@ def run_extrapolation_experiment(
                 f"Stopped at step {i+1}: Latent vector norm ({current_latent_norm:.2f}) exceeded threshold ({max_latent_norm_threshold:.2f}).")
             break
 
-        # Condition 3: Fixed attribute not preserved
-        if fixed_attr_score_current is not None and fixed_attr_score_current < experiment_params['fixed_attr_stability_threshold']:
-            print(
-                f"Stopped at step {i+1}: Fixed attribute '{experiment_params['fixed_attribute']}' not preserved. Score: {fixed_attr_score_current:.2f}")
-            break
+        # Condition 3: Fixed attribute not preserved (only if a fixed_attribute is specified)
+        # Ensure fixed_attribute key exists
+        if fixed_discriminator_model and experiment_params.get('fixed_attribute'):
+            fixed_attr_name = experiment_params['fixed_attribute']
+            stability_threshold = experiment_params['fixed_attr_stability_threshold']
+
+            # Determine the desired state of the fixed attribute based on initial_image_criteria
+            # Default to 1 if not explicitly found (e.g., if it was implicitly positive)
+            desired_fixed_attr_initial_val = experiment_params['initial_image_criteria'].get(
+                fixed_attr_name, 1)
+
+            should_stop = False
+            stop_reason = ""
+
+            # We want to keep the attribute in a positive state (e.g., Male=1, Bald=1)
+            if desired_fixed_attr_initial_val == 1:
+                # Stop if the current score drops *below* the threshold
+                if fixed_attr_score_current < stability_threshold:
+                    should_stop = True
+                    stop_reason = f"Fixed attribute '{fixed_attr_name}' (desired positive) not preserved. Score: {fixed_attr_score_current:.2f} < Threshold: {stability_threshold:.2f}"
+            # desired_fixed_attr_initial_val == 0. We want to keep the attribute in a negative state (e.g., Male=0 for female)
+            else:
+                # Stop if the current score *rises above* the threshold
+                if fixed_attr_score_current > stability_threshold:
+                    should_stop = True
+                    stop_reason = f"Fixed attribute '{fixed_attr_name}' (desired negative) not preserved. Score: {fixed_attr_score_current:.2f} > Threshold: {stability_threshold:.2f}"
+
+            if should_stop:
+                print(f"Stopped at step {i+1}: {stop_reason}")
+                break
 
         # Apply the pull-to-center logic and move along the direction vector
         current_z = (1 - pull_strength) * current_z + \
@@ -337,7 +362,8 @@ if __name__ == "__main__":
         "target_attr_stop_threshold": 20.0,
         "fixed_attribute": "Male",  # Now correctly references 'Male'
         # Stop if 'Male' score *rises above* 0.5 (becomes more male)
-        "fixed_attr_stability_threshold": -0.5,
+        # THIS SHOULD BE POSITIVE, e.g., 0.5, to stop if it becomes male
+        "fixed_attr_stability_threshold": 0.5,
         "num_extrapolation_steps": 25,
         "step_size": 0.3,
         "pull_strength": 0.015,
