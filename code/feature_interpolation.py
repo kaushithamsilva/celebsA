@@ -16,7 +16,7 @@ from hyperplane import Hyperplane
 SAVE_PATH = '../../models/ci_vae/'
 CHECKPOINT_PATH = os.path.join(SAVE_PATH, 'checkpoints/')
 # DISCRIMINATOR_SAVE_PATH = os.path.join(SAVE_PATH, 'discriminators/') # Not directly used in interpolation script
-EPOCH = 400
+EPOCH = 500
 
 VAE_MODEL_PATH = CHECKPOINT_PATH
 VAE_MODEL_NAME = f'vae-e{EPOCH}'  # Load the VAE from the specified epoch
