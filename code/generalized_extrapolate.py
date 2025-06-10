@@ -357,10 +357,10 @@ if __name__ == "__main__":
         "initial_image_criteria": {"Male": 1, "Young": 0},
         "attribute_to_change": "Young",
         # Moving from Not Young (0) towards even less Young (more negative score for Young)
-        "change_direction_towards_positive": False,
+        "change_direction_towards_positive": True,
         # Target: 'Young' score very negative (looks old)
         # A significantly negative score for 'Young' implies 'Old'
-        "target_attr_stop_threshold": -25.0,
+        "target_attr_stop_threshold": 25.0,
         "fixed_attribute": "Male",
         # Stop if 'Male' score drops below 0.5 (becomes more female)
         "fixed_attr_stability_threshold": 0.5,
