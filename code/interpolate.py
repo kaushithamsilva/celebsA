@@ -117,7 +117,7 @@ if __name__ == "__main__":
 
     # 1. Load VAE model
     print(f"Loading VAE model from {VAE_MODEL_PATH}...")
-    vae_model = model_utils.load_vae_model(
+    vae_model = model_utils.load_model(
         VAE_MODEL_PATH, VAE_MODEL_NAME
     )
     if vae_model is None:
