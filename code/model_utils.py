@@ -19,11 +19,14 @@ def save_model(model, file_path, file_name):
     print(f"Model saved to {full_file_path}")
 
 
-def load_ci_di_vae(folder_path, epoch):
-    vae_model = tf.keras.models.load_model(
-        f"{folder_path}/vae-e{epoch}.keras", compile=False, custom_objects={'Sampling': Sampling, 'VAE': VAE})
-    class_discriminator = tf.keras.models.load_model(
-        f"{folder_path}/class_discriminator-e{epoch}.keras", compile=False)
-    domain_discriminator = tf.keras.models.load_model(
-        f"{folder_path}/domain_discriminator-e{epoch}.keras", compile=False)
-    return vae_model, class_discriminator, domain_discriminator
+def load_vae_model(path, name):
+    full_path = os.path.join(path, name + '.keras')
+    # Custom objects are crucial for loading custom Keras Layers/Models
+    custom_objects = {"VAE": VAE, "Sampling": Sampling}
+    if not os.path.exists(full_path):
+        print(f"Error: Model not found at {full_path}")
+        return None
+    model = tf.keras.models.load_model(
+        full_path, custom_objects=custom_objects)
+    print(f"Model loaded: {full_path}")
+    return model
