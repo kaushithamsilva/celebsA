@@ -50,24 +50,35 @@ def get_attribute_index(attribute_name, attr_names_list):
 def select_images_with_attribute(dataset, attribute_index, num_samples=2):
     """
     Selects a specified number of images that have the given attribute.
+    Iterates over batches and collects samples.
     """
     selected_images = []
     selected_attributes = []
-    for image_batch, attr_batch in dataset:
-        # Assuming attribute values are 0 (not present) or 1 (present)
+
+    # The dataset already yields batches (image_batch, attr_batch)
+    for image_batch, attr_batch in dataset:  # dataset is already batched
+        # Ensure attr_batch is indeed 2D, even if batch size is 1 or it's the last incomplete batch
+        # tf.shape(attr_batch) will give [batch_size, num_attributes]
+
+        # Create a mask for the current batch
+        # This will be [batch_size] boolean tensor
         has_attribute_mask = (attr_batch[:, attribute_index] == 1.0)
 
-        # Filter images and attributes that have the desired attribute
+        # Use tf.boolean_mask to get the images and attributes that match within this batch
         images_with_attribute = tf.boolean_mask(
             image_batch, has_attribute_mask)
         attrs_with_attribute = tf.boolean_mask(attr_batch, has_attribute_mask)
 
+        # Iterate over the filtered samples and add to our list
         for i in range(tf.shape(images_with_attribute)[0]):
             selected_images.append(images_with_attribute[i])
             selected_attributes.append(attrs_with_attribute[i])
+
+            # Stop once we have enough samples
             if len(selected_images) >= num_samples:
                 return selected_images[:num_samples], selected_attributes[:num_samples]
 
+    # If the loop finishes and we don't have enough samples
     if len(selected_images) < num_samples:
         raise ValueError(
             f"Could not find {num_samples} images with the specified attribute.")
@@ -131,9 +142,6 @@ if __name__ == "__main__":
     print("Dataset loaded.")
 
     # Get the index for 'Mustache' attribute
-    # Note: Attribute names might be case-sensitive. Check your CSV header.
-    # Common name is 'Mustache' or 'No_Beard' might imply absence of mustache
-    # Let's assume 'Mustache' directly exists.
     try:
         mustache_attr_idx = get_attribute_index(
             'Mustache', celeba_attribute_names)
@@ -147,8 +155,9 @@ if __name__ == "__main__":
     # 3. Select two images with 'Mustache'
     print(f"Selecting two images with 'Mustache' attribute...")
     try:
+        # Pass the already batched train_ds directly
         mustache_images, _ = select_images_with_attribute(
-            train_ds.unbatch(),  # Unbatch to process individual samples
+            train_ds,  # No .unbatch() here!
             mustache_attr_idx,
             num_samples=2
         )
