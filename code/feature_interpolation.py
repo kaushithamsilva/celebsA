@@ -250,7 +250,7 @@ if __name__ == "__main__":
     attr_df_for_names = pd.read_csv(ATTRIBUTES_CSV, index_col=0)
     celeba_attribute_names = attr_df_for_names.columns.tolist()
 
-    train_ds, _, _ = get_celeba_datasets_with_splits(
+    _, _, test_ds = get_celeba_datasets_with_splits(
         image_dir=IMAGE_DIR,
         attr_csv_path=ATTRIBUTES_CSV,
         eval_csv_path=EVAL_PARTITION_CSV,
@@ -262,15 +262,15 @@ if __name__ == "__main__":
     # --- Example Interpolations ---
 
     # Example 1: Mustache (No Hat -> With Hat) - Your previous case
-    perform_interpolation(vae_model, train_ds, celeba_attribute_names,
+    perform_interpolation(vae_model, test_ds, celeba_attribute_names,
                           attr_1_name='Mustache', attr_2_name='Wearing_Hat', epoch=EPOCH)
 
     # Example 2: Male (No Smiling -> With Smiling)
-    perform_interpolation(vae_model, train_ds, celeba_attribute_names,
+    perform_interpolation(vae_model, test_ds, celeba_attribute_names,
                           attr_1_name='Male', attr_2_name='Smiling', epoch=EPOCH)
 
     # Example 3: Young (No Eyeglasses -> With Eyeglasses)
-    perform_interpolation(vae_model, train_ds, celeba_attribute_names,
+    perform_interpolation(vae_model, test_ds, celeba_attribute_names,
                           attr_1_name='Young', attr_2_name='Eyeglasses', epoch=EPOCH)
 
     print("\n--- All requested interpolations complete ---")
