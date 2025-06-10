@@ -215,7 +215,7 @@ if __name__ == "__main__":
     pull_strength = 0.1
 
     # Define a threshold for the latent vector norm (distance from origin)
-    max_latent_norm_threshold = 5 * np.sqrt(LATENT_DIM)
+    max_latent_norm_threshold = 10 * np.sqrt(LATENT_DIM)
     print(f"Maximum allowed latent norm: {max_latent_norm_threshold:.2f}")
     print(f"Pull-to-center strength (beta): {pull_strength}")
 
