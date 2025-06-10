@@ -4,7 +4,7 @@ import pandas as pd
 import io
 
 
-def load_and_preprocess_image(file_path, image_size=(128, 128)):
+def load_and_preprocess_image(file_path, image_size=(64, 64)):
     """
     Loads an image from a file path, decodes it, resizes it, and normalizes pixel values.
 
@@ -22,63 +22,76 @@ def load_and_preprocess_image(file_path, image_size=(128, 128)):
     return image
 
 
-def get_celeba_dataset_with_attributes(image_dir, attr_csv_path, image_size=(128, 128), batch_size=32, shuffle=True):
+def get_celeba_datasets_with_splits(image_dir, attr_csv_path, eval_csv_path, image_size=(64, 64), batch_size=32):
     """
-    Creates a TensorFlow Dataset for CelebA, returning images and their corresponding attributes.
+    Creates TensorFlow Datasets for CelebA, returning images and their corresponding attributes,
+    split into training, validation, and testing sets.
 
     Args:
         image_dir (str): Directory containing the CelebA image files.
         attr_csv_path (str): Path to the list_attr_celeba.csv file.
+        eval_csv_path (str): Path to the list_eval_partition.csv file.
         image_size (tuple): Desired (height, width) for the image.
-        batch_size (int): Number of samples per batch.
-        shuffle (bool): Whether to shuffle the dataset.
+        batch_size (int): Number of samples per batch for each dataset.
 
     Returns:
-        tf.data.Dataset: A dataset yielding (image, attributes) pairs.
+        tuple: A tuple containing (train_dataset, val_dataset, test_dataset),
+               each yielding (image, attributes) pairs.
     """
     # 1. Load attribute data
-    # The first row contains the attribute names, so header=0 (default) is correct.
-    # We replace -1 with 0 for binary attributes.
     attr_df = pd.read_csv(attr_csv_path, index_col=0)
-    attr_df = attr_df.replace(-1, 0)
+    attr_df = attr_df.replace(-1, 0)  # Replace -1 with 0 for binary attributes
 
-    # Convert DataFrame to a dictionary for faster lookup
-    # Keys will be image filenames (e.g., '000001.jpg'), values will be attribute arrays
-    attribute_dict = {index: row.values.astype(
-        'float32') for index, row in attr_df.iterrows()}
+    # 2. Load evaluation partition data
+    eval_df = pd.read_csv(eval_csv_path, index_col=0, header=None, names=[
+                          'image_id', 'partition_type'])
 
-    # Get all image paths and filter for those present in the attribute dictionary
-    all_image_paths = [os.path.join(image_dir, fname) for fname in os.listdir(
-        image_dir) if fname.endswith('.jpg')]
+    # 3. Merge attribute and partition dataframes
+    # Ensure indices (image filenames) are aligned
+    merged_df = attr_df.merge(eval_df, left_index=True, right_index=True)
 
-    # Filter image paths to ensure they have corresponding attribute entries
-    # This handles cases where an image might exist but not be in the CSV, or vice-versa
-    valid_image_paths = [
-        path for path in all_image_paths if os.path.basename(path) in attribute_dict]
+    # Prepare data for TensorFlow Datasets
+    image_filenames = merged_df.index.values  # This is '000001.jpg', etc.
+    # All columns except the last one (partition_type)
+    attributes = merged_df.iloc[:, :-1].values
+    # 0 for train, 1 for val, 2 for test
+    partition_types = merged_df['partition_type'].values
 
-    # Extract corresponding attribute vectors in the same order as valid_image_paths
-    valid_attributes = [attribute_dict[os.path.basename(
-        path)] for path in valid_image_paths]
+    # Create a base TensorFlow Dataset from image filenames, attributes, and partition types
+    # This keeps everything aligned.
+    full_dataset = tf.data.Dataset.from_tensor_slices(
+        (image_filenames, attributes, partition_types))
 
-    # Create TensorFlow Datasets for paths and attributes
-    path_ds = tf.data.Dataset.from_tensor_slices(valid_image_paths)
-    attr_ds = tf.data.Dataset.from_tensor_slices(
-        tf.constant(valid_attributes, dtype=tf.float32))
+    # Define filter functions for each split
+    # Partition types: 0 = training, 1 = validation, 2 = testing
+    def is_train(image_name, attrs, partition_type):
+        return tf.equal(partition_type, 0)
 
-    # Pair paths and attributes
-    dataset = tf.data.Dataset.zip((path_ds, attr_ds))
+    def is_val(image_name, attrs, partition_type):
+        return tf.equal(partition_type, 1)
 
-    # Map function to load and preprocess images, now also including attributes
-    def load_image_and_attributes(file_path_tensor, attributes_tensor):
-        image = load_and_preprocess_image(file_path_tensor, image_size)
-        return image, attributes_tensor
+    def is_test(image_name, attrs, partition_type):
+        return tf.equal(partition_type, 2)
 
-    image_attr_ds = dataset.map(
-        load_image_and_attributes, num_parallel_calls=tf.data.AUTOTUNE)
+    # Function to load image and return (image, attributes) only
+    def _parse_function(image_name, attributes, partition_type):
+        file_path = tf.strings.join(
+            [image_dir, image_name])  # Construct full path
+        image = load_and_preprocess_image(file_path, image_size)
+        return image, attributes
 
-    if shuffle:
-        # Shuffle the dataset, ensuring image and attributes stay paired
-        image_attr_ds = image_attr_ds.shuffle(buffer_size=1000)
+    # Filter and map for each split
+    train_dataset = full_dataset.filter(is_train).map(
+        _parse_function, num_parallel_calls=tf.data.AUTOTUNE)
+    val_dataset = full_dataset.filter(is_val).map(
+        _parse_function, num_parallel_calls=tf.data.AUTOTUNE)
+    test_dataset = full_dataset.filter(is_test).map(
+        _parse_function, num_parallel_calls=tf.data.AUTOTUNE)
 
-    image_attr_ds = image_attr_ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    return image_attr_ds
+    # Apply shuffling, batching, and prefetching
+    train_dataset = train_dataset.shuffle(buffer_size=10000).batch(
+        batch_size).prefetch(tf.data.AUTOTUNE)
+    val_dataset = val_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    test_dataset = test_dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+    return train_dataset, val_dataset, test_dataset
