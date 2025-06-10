@@ -1,0 +1,8 @@
+*.pyc
+/dataset/processed
+/figures
+/.venv
+*.out
+/synthesized
+checkpoints/
+*.joblib
