@@ -359,14 +359,14 @@ if __name__ == "__main__":
         # Moving from No Eyeglasses (0) to Eyeglasses (1)
         "change_direction_towards_positive": True,
         # Target: 'Eyeglasses' score very positive (has eyeglasses)
-        "target_attr_stop_threshold": 20.0,
+        "target_attr_stop_threshold": 40.0,
         "fixed_attribute": "Male",  # Now correctly references 'Male'
         # Stop if 'Male' score *rises above* 0.5 (becomes more male)
         # THIS SHOULD BE POSITIVE, e.g., 0.5, to stop if it becomes male
         "fixed_attr_stability_threshold": 0.5,
         "num_extrapolation_steps": 25,
         "step_size": 0.3,
-        "pull_strength": 0.015,
+        "pull_strength": 0.01,
         "output_filename_suffix": "female_to_glasses_corrected",
         "title": "Extrapolation: Female, No Eyeglasses to Female, With Eyeglasses"
     }
