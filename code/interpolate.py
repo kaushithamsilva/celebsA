@@ -18,7 +18,7 @@ DISCRIMINATOR_SAVE_PATH = os.path.join(SAVE_PATH, 'discriminators/')
 EPOCH = 400
 
 
-VAE_MODEL_PATH = SAVE_PATH
+VAE_MODEL_PATH = CHECKPOINT_PATH
 VAE_MODEL_NAME = 'vae-e400'  # As saved in the training script
 
 IMAGE_DIR = '../data/img_align_celeba/img_align_celeba/'
