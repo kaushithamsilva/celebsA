@@ -270,7 +270,7 @@ if __name__ == '__main__':
     # Define image size and batch size
     INPUT_IMAGE_SIZE = (64, 64)  # Height, Width
     INPUT_IMAGE_CHANNELS = 3
-    BATCH_SIZE = 32
+    BATCH_SIZE = 256
 
     print("Loading CelebA datasets...")
     train_ds, val_ds, test_ds = get_celeba_datasets_with_splits(
