@@ -237,7 +237,7 @@ def run_extrapolation_experiment(
     step_size = experiment_params['step_size']
     pull_strength = experiment_params['pull_strength']
 
-    max_latent_norm_threshold = 2.5 * np.sqrt(LATENT_DIM)  # General safeguard
+    max_latent_norm_threshold = 10 * np.sqrt(LATENT_DIM)  # General safeguard
     print(f"Maximum allowed latent norm: {max_latent_norm_threshold:.2f}")
     print(f"Pull-to-center strength (beta): {pull_strength}")
 
