@@ -246,7 +246,7 @@ if __name__ == "__main__":
     # 6. Traverse (Extrapolate) in the calculated direction
     num_extrapolation_steps = 10  # How many steps to take
     # How much to move along the average direction per step (tune this!)
-    step_size = 0.5
+    step_size = 1.0
 
     # Start with the original image
     generated_images = [random_original_image[0]]
