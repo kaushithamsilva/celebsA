@@ -326,67 +326,27 @@ if __name__ == "__main__":
     )
     print("Dataset loaded.")
 
-    # --- Define your extrapolation experiments here ---
-    # Example 1: Male, Bald to Male, Not Bald (Hair)
-    male_bald_to_hair_experiment = {
-        "initial_image_criteria": {"Male": 1, "Bald": 1},
-        "attribute_to_change": "Bald",
-        # Moving from Bald (1) to Not Bald (0)
-        "change_direction_towards_positive": False,
-        # Target: 'Bald' score very negative (less bald)
-        "target_attr_stop_threshold": -20.0,
-        "fixed_attribute": "Male",
-        # Stop if 'Male' score drops below -0.5 (becomes more female)
-        "fixed_attr_stability_threshold": -0.5,
-        "num_extrapolation_steps": 20,
-        "step_size": 0.2,
-        "pull_strength": 0.01,
-        "output_filename_suffix": "male_bald_to_hair",
-        "title": "Extrapolation: Male, Bald to Male, Hair"
-    }
-
-    # Example 2: Female, Eyeglasses to Female, No Eyeglasses
-    female_glasses_to_no_glasses_experiment = {
-        "initial_image_criteria": {"Female": 1, "Eyeglasses": 1},
+    # Example 7: Female, No Eyeglasses to Female, With Eyeglasses
+    female_to_glasses_experiment = {
+        # Start with a female who does NOT have eyeglasses
+        "initial_image_criteria": {"Female": 1, "Eyeglasses": 0},
         "attribute_to_change": "Eyeglasses",
-        # Moving from Eyeglasses (1) to No Eyeglasses (0)
-        "change_direction_towards_positive": False,
-        "target_attr_stop_threshold": -20.0,  # Target: 'Eyeglasses' score very negative
+        # Moving from No Eyeglasses (0) to Eyeglasses (1)
+        "change_direction_towards_positive": True,
+        # Target: 'Eyeglasses' score very positive (has eyeglasses)
+        "target_attr_stop_threshold": 20.0,
         "fixed_attribute": "Female",
         # Stop if 'Female' score drops below 0.5 (becomes more male)
         "fixed_attr_stability_threshold": 0.5,
-        "num_extrapolation_steps": 20,
-        "step_size": 0.2,
-        "pull_strength": 0.02,
-        "output_filename_suffix": "female_glasses_to_no_glasses",
-        "title": "Extrapolation: Female, Eyeglasses to Female, No Eyeglasses"
-    }
-
-    black_to_white_bald_experiment = {
-        # Start with a male, bald, and *not* pale-skinned individual
-        "initial_image_criteria": {"Bald": 1, "Pale_Skin": 0},
-        "attribute_to_change": "Pale_Skin",
-        # Moving from No Pale Skin (0) to Pale Skin (1)
-        "change_direction_towards_positive": True,
-        # Target: 'Pale_Skin' score very positive (significantly pale)
-        "target_attr_stop_threshold": 25.0,
-        # You might need to adjust this based on your discriminator's output
-        "fixed_attribute": "Bald",
-        # Stop if 'Bald' score drops below 0.5 (starts getting hair)
-        "fixed_attr_stability_threshold": 0.5,
-        "num_extrapolation_steps": 20,
+        "num_extrapolation_steps": 25,
         "step_size": 0.3,
         "pull_strength": 0.015,
-        "output_filename_suffix": "black_to_white_bald",
-        "title": "Extrapolation: Black Man to White Man (Bald Fixed)"
+        "output_filename_suffix": "female_to_glasses",
+        "title": "Extrapolation: Female, No Eyeglasses to Female, With Eyeglasses"
     }
 
-    # Run your desired experiments
+    # Don't forget to call this new experiment!
     run_extrapolation_experiment(
-        vae_model, celeba_attribute_names, train_ds, male_bald_to_hair_experiment)
-    run_extrapolation_experiment(
-        vae_model, celeba_attribute_names, train_ds, female_glasses_to_no_glasses_experiment)
-    run_extrapolation_experiment(
-        vae_model, celeba_attribute_names, train_ds, black_to_white_bald_experiment)
+        vae_model, celeba_attribute_names, train_ds, female_to_glasses_experiment)
 
     print("\n--- All Extrapolation Experiments Complete ---")
