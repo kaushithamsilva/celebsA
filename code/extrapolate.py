@@ -235,7 +235,7 @@ if __name__ == "__main__":
         # Check conditions to stop extrapolation
         # Condition 1: 'Bald' attribute changes (we want to reach a 'Not Bald' state)
         # Assuming a negative score implies 'Not Bald'
-        if bald_score_current < -5.0:  # Tuned threshold for 'Bald' to 'Not Bald' transition
+        if bald_score_current < -15.0:  # Tuned threshold for 'Bald' to 'Not Bald' transition
             print(
                 f"Stopped at step {i+1}: Latent vector reached 'Not Bald' region. Bald Score: {bald_score_current:.2f}")
             break
