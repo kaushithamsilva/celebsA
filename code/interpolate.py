@@ -58,11 +58,11 @@ def select_images_with_attribute(dataset, attribute_index, num_samples=2):
     # The dataset already yields batches (image_batch, attr_batch)
     for image_batch, attr_batch in dataset:  # dataset is already batched
         # Ensure attr_batch is indeed 2D, even if batch size is 1 or it's the last incomplete batch
-        # tf.shape(attr_batch) will give [batch_size, num_attributes]
 
-        # Create a mask for the current batch
-        # This will be [batch_size] boolean tensor
-        has_attribute_mask = (attr_batch[:, attribute_index] == 1.0)
+        # FIX: Compare with an integer literal, or cast 1.0 to attr_batch's dtype
+        # Assuming attributes are 0 or 1 (integers)
+        has_attribute_mask = (
+            attr_batch[:, attribute_index] == 1)  # Changed 1.0 to 1
 
         # Use tf.boolean_mask to get the images and attributes that match within this batch
         images_with_attribute = tf.boolean_mask(
