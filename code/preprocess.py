@@ -57,21 +57,29 @@ def get_celeba_datasets_with_splits(image_dir, attr_csv_path, eval_csv_path, ima
     # 0 for train, 1 for val, 2 for test
     partition_types = merged_df['partition_type'].values
 
+    # Explicitly cast partition_types to a specific TensorFlow integer type
+    # For example, tf.int32, to ensure consistent comparison.
+    # We choose int32 as it's common for such indices.
+    partition_types_tf = tf.constant(partition_types, dtype=tf.int32)
+
     # Create a base TensorFlow Dataset from image filenames, attributes, and partition types
     # This keeps everything aligned.
     full_dataset = tf.data.Dataset.from_tensor_slices(
-        (image_filenames, attributes, partition_types))
+        (image_filenames, attributes, partition_types_tf))
 
     # Define filter functions for each split
     # Partition types: 0 = training, 1 = validation, 2 = testing
     def is_train(image_name, attrs, partition_type):
-        return tf.equal(partition_type, 0)
+        # Cast the literal 0 to the same type as partition_type
+        return tf.equal(partition_type, tf.cast(0, partition_type.dtype))
 
     def is_val(image_name, attrs, partition_type):
-        return tf.equal(partition_type, 1)
+        # Cast the literal 1 to the same type as partition_type
+        return tf.equal(partition_type, tf.cast(1, partition_type.dtype))
 
     def is_test(image_name, attrs, partition_type):
-        return tf.equal(partition_type, 2)
+        # Cast the literal 2 to the same type as partition_type
+        return tf.equal(partition_type, tf.cast(2, partition_type.dtype))
 
     # Function to load image and return (image, attributes) only
     def _parse_function(image_name, attributes, partition_type):
