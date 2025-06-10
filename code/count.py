@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load CSV (replace with your path)
-df = pd.read_csv('../data/list_attr_celeba.csv', index_col=0, skiprows=1)
+df = pd.read_csv('../data/list_attr_celeba.csv', index_col=0, skiprows=0)
 df = df.replace(-1, 0)  # Map values
 
 # Count attributes
